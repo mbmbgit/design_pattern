@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gitブランチモデル完全ガイド</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        
+        /* Chart Container Utilities */
+        .chart-container { position: relative; width: 100%; max-width: 500px; margin: 0 auto; height: 350px; }
+        
+        /* CSS-based Branch Visualization (NO SVG) */
+        .branch-viz { position: relative; height: 140px; width: 100%; background-color: #f1f5f9; border-radius: 0.5rem; overflow: hidden; margin-bottom: 1rem; border: 1px solid #e2e8f0; }
+        .track { position: absolute; height: 4px; border-radius: 2px; width: 90%; left: 5%; z-index: 1; }
+        .node { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .label-tag { position: absolute; padding: 2px 8px; border-radius: 9999px; color: white; font-size: 0.65rem; font-weight: bold; z-index: 5; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+        /* Git-flow Styles */
+        .gf-master { top: 20px; background-color: #e11d48; } /* Rose 600 */
+        .gf-release { top: 55px; background-color: #f59e0b; } /* Amber 500 */
+        .gf-develop { top: 90px; background-color: #3b82f6; } /* Blue 500 */
+        
+        /* GitHub Flow Styles */
+        .gh-main { top: 40px; background-color: #4f46e5; } /* Indigo 600 */
+        .gh-feat { top: 90px; background-color: #94a3b8; width: 60%; left: 20%; } /* Slate 400 */
+
+        /* GitLab Flow Styles */
+        .gl-prod { top: 20px; background-color: #ef4444; } /* Red 500 */
+        .gl-pre { top: 60px; background-color: #0ea5e9; } /* Sky 500 */
+        .gl-main { top: 100px; background-color: #4f46e5; } /* Indigo 600 */
+    </style>
+    <!--
+    SUMMARY OF VISUALIZATIONS & STRUCTURE:
+    1. Introduction: Concept definition (Git vs Models).
+    2. Comparison Radar Chart (Chart.js): Compares Strictness, Speed, Complexity.
+    3. Model Cards:
+       - Git-flow: CSS visualization showing Master/Release/Develop lines.
+       - GitHub Flow: CSS visualization showing Main/Feature lines.
+       - GitLab Flow: CSS visualization showing Prod/Pre-prod/Main lines.
+    4. Decision Matrix (Plotly ScatterGL): Release Frequency vs Strictness bubble chart.
+    
+    CONFIRMATION:
+    - NO Mermaid JS.
+    - NO SVG tags (Charts use Canvas/WebGL, Diagrams use CSS).
+    -->
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-12 px-4 shadow-xl border-b-4 border-indigo-500">
+        <div class="container mx-auto max-w-5xl text-center">
+            <h1 class="text-3xl md:text-5xl font-black mb-4 tracking-tight">Gitブランチモデル<br><span class="text-indigo-400">図解ガイド</span></h1>
+            <p class="text-lg md:text-xl text-slate-300 font-bold max-w-2xl mx-auto">
+                「ソフトウェア」ではなく「ルール」を選ぶ。<br>
+                プロジェクトの性質に合わせた最適な開発フローの選定。
+            </p>
+        </div>
+    </header>
+
+    <main class="container mx-auto max-w-5xl px-4 py-12 space-y-16">
+
+        <!-- 1. Analogy Section -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            <div class="flex flex-col md:flex-row items-center gap-8">
+                <div class="flex-1 space-y-4">
+                    <h2 class="text-2xl font-bold text-slate-800 border-l-8 border-indigo-500 pl-4">1. 道具とルールの違い</h2>
+                    <p class="text-slate-600 leading-relaxed">
+                        結論から言うと、どのモデルを採用しても使用するソフトウェアはすべて同じ<strong>「Git」</strong>です。
+                        違いはソフトウェアではなく、<strong>「運用ルール（切り方）」</strong>にあります。
+                    </p>
+                    <div class="grid grid-cols-2 gap-4 mt-6">
+                        <div class="bg-slate-50 p-4 rounded-xl text-center border border-slate-100">
+                            <div class="text-4xl mb-2">🔪</div>
+                            <h3 class="font-bold text-slate-700">Git</h3>
+                            <p class="text-xs text-slate-500">包丁（道具）</p>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-xl text-center border border-slate-100">
+                            <div class="text-4xl mb-2">🥗</div>
+                            <h3 class="font-bold text-slate-700">Branch Model</h3>
+                            <p class="text-xs text-slate-500">切り方（ルール）</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex-1 w-full flex flex-col items-center">
+                    <h3 class="font-bold text-slate-600 mb-2 text-sm uppercase tracking-wide">モデル特性比較レーダー</h3>
+                    <div class="chart-container">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Detailed Models Section -->
+        <section>
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-slate-800">2. 3つの代表的モデル</h2>
+                <p class="text-slate-500 mt-2">プロジェクトの規模とリリース頻度に応じて選択します</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Git-flow -->
+                <div class="bg-white rounded-xl shadow-lg border-t-8 border-rose-600 flex flex-col overflow-hidden">
+                    <div class="p-6 flex-grow">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold text-rose-600">① Git-flow</h3>
+                            <span class="bg-rose-100 text-rose-800 text-xs font-bold px-2 py-1 rounded">超慎重</span>
+                        </div>
+                        
+                        <!-- CSS Diagram -->
+                        <div class="branch-viz">
+                            <!-- Master Line -->
+                            <div class="track gf-master"></div>
+                            <div class="label-tag bg-rose-600" style="top:4px; left:2%;">Master</div>
+                            <div class="node bg-rose-600" style="top:15px; left:90%;"></div>
+                            
+                            <!-- Release Line -->
+                            <div class="track gf-release" style="width:30%; left:60%;"></div>
+                            <div class="label-tag bg-amber-500" style="top:40px; left:60%;">Release</div>
+                            
+                            <!-- Develop Line -->
+                            <div class="track gf-develop"></div>
+                            <div class="label-tag bg-blue-500" style="top:75px; left:2%;">Develop</div>
+                            <div class="node bg-blue-500" style="top:85px; left:20%;"></div>
+                            <div class="node bg-blue-500" style="top:85px; left:50%;"></div>
+                        </div>
+
+                        <p class="text-sm text-slate-600 mb-4 font-medium">特徴: 厳格で複雑</p>
+                        <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                            「開発用」と「本番用」を完全に分離。リリース準備期間を経て公開するスタイル。
+                        </p>
+                        <div class="bg-rose-50 p-3 rounded text-xs text-rose-900 font-bold">
+                            🎯 定期リリースが決まっているアプリ・金融系
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GitHub Flow -->
+                <div class="bg-white rounded-xl shadow-lg border-t-8 border-indigo-600 flex flex-col overflow-hidden">
+                    <div class="p-6 flex-grow">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold text-indigo-600">② GitHub Flow</h3>
+                            <span class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded">超高速</span>
+                        </div>
+
+                        <!-- CSS Diagram -->
+                        <div class="branch-viz">
+                            <!-- Main Line -->
+                            <div class="track gh-main"></div>
+                            <div class="label-tag bg-indigo-600" style="top:24px; left:2%;">Main</div>
+                            <div class="node bg-indigo-600" style="top:35px; left:10%;"></div>
+                            <div class="node bg-indigo-600" style="top:35px; left:90%;"></div>
+
+                            <!-- Feature Line -->
+                            <div class="track gh-feat"></div>
+                            <div class="label-tag bg-slate-400" style="top:74px; left:20%;">Feature</div>
+                            <div class="node bg-slate-400" style="top:85px; left:50%;"></div>
+                        </div>
+
+                        <p class="text-sm text-slate-600 mb-4 font-medium">特徴: シンプル・最速</p>
+                        <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                            本番ブランチは1本のみ。マージした瞬間にデプロイされるWeb開発の主流。
+                        </p>
+                        <div class="bg-indigo-50 p-3 rounded text-xs text-indigo-900 font-bold">
+                            🎯 スタートアップ・Webサービス
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GitLab Flow -->
+                <div class="bg-white rounded-xl shadow-lg border-t-8 border-sky-500 flex flex-col overflow-hidden">
+                    <div class="p-6 flex-grow">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xl font-bold text-sky-600">③ GitLab Flow</h3>
+                            <span class="bg-sky-100 text-sky-800 text-xs font-bold px-2 py-1 rounded">バランス</span>
+                        </div>
+
+                        <!-- CSS Diagram -->
+                        <div class="branch-viz">
+                            <!-- Prod Line -->
+                            <div class="track gl-prod"></div>
+                            <div class="label-tag bg-red-500" style="top:4px; left:80%;">Prod</div>
+                            <div class="node bg-red-500" style="top:15px; left:90%;"></div>
+
+                            <!-- Pre-Prod Line -->
+                            <div class="track gl-pre" style="width:70%;"></div>
+                            <div class="label-tag bg-sky-500" style="top:44px; left:50%;">Pre-Prod</div>
+                            
+                            <!-- Main Line -->
+                            <div class="track gl-main"></div>
+                            <div class="label-tag bg-indigo-600" style="top:84px; left:2%;">Main</div>
+                            <div class="node bg-indigo-600" style="top:95px; left:30%;"></div>
+                        </div>
+
+                        <p class="text-sm text-slate-600 mb-4 font-medium">特徴: 環境別・実務的</p>
+                        <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                            GitHub Flowに「検証環境」等のクッションを追加。企業の実務に合わせたモデル。
+                        </p>
+                        <div class="bg-sky-50 p-3 rounded text-xs text-sky-900 font-bold">
+                            🎯 受託開発・Sier・業務システム
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- 3. Decision Matrix -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            <h2 class="text-2xl font-bold text-slate-800 mb-6 border-l-8 border-indigo-500 pl-4">3. 選び方マトリクス</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2">
+                    <div id="decisionMatrix" class="w-full h-[400px] bg-slate-50 rounded-xl border border-slate-100"></div>
+                </div>
+                <div class="space-y-6 flex flex-col justify-center">
+                    <div class="p-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-500">
+                        <h4 class="font-bold text-indigo-800">スピード重視</h4>
+                        <p class="text-xs text-indigo-700 mt-1">毎日リリースしたいなら<br><strong>GitHub Flow</strong></p>
+                    </div>
+                    <div class="p-4 bg-sky-50 rounded-lg border-l-4 border-sky-500">
+                        <h4 class="font-bold text-sky-800">確認重視</h4>
+                        <p class="text-xs text-sky-700 mt-1">客先確認が必要なら<br><strong>GitLab Flow</strong></p>
+                    </div>
+                    <div class="p-4 bg-rose-50 rounded-lg border-l-4 border-rose-500">
+                        <h4 class="font-bold text-rose-800">品質絶対</h4>
+                        <p class="text-xs text-rose-700 mt-1">バグが許されないなら<br><strong>Git-flow</strong></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-8 text-center text-sm">
+        <p>Created based on "Git Branch Model Report"</p>
+        <p class="mt-2 text-xs">Uses Chart.js & Plotly.js (Canvas/WebGL only)</p>
+    </footer>
+
+    <script>
+        // --- 1. Radar Chart (Chart.js) ---
+        // Helper to split long labels for tooltips
+        function wrapLabel(str) {
+            return str.match(/.{1,16}/g) || [str];
+        }
+
+        const ctxRadar = document.getElementById('radarChart').getContext('2d');
+        new Chart(ctxRadar, {
+            type: 'radar',
+            data: {
+                labels: ['厳格さ/安全性', '複雑さ', '学習コスト', '柔軟性', '開発スピード'],
+                datasets: [
+                    {
+                        label: 'Git-flow',
+                        data: [9, 10, 9, 3, 2],
+                        backgroundColor: 'rgba(225, 29, 72, 0.2)', // Rose
+                        borderColor: 'rgba(225, 29, 72, 1)',
+                        pointBackgroundColor: 'rgba(225, 29, 72, 1)',
+                    },
+                    {
+                        label: 'GitHub Flow',
+                        data: [2, 2, 2, 9, 10],
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)', // Indigo
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        pointBackgroundColor: 'rgba(79, 70, 229, 1)',
+                    },
+                    {
+                        label: 'GitLab Flow',
+                        data: [6, 6, 5, 6, 7],
+                        backgroundColor: 'rgba(14, 165, 233, 0.2)', // Sky
+                        borderColor: 'rgba(14, 165, 233, 1)',
+                        pointBackgroundColor: 'rgba(14, 165, 233, 1)',
+                    }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 10,
+                        ticks: { display: false }, // Hide numbers for cleaner look
+                        pointLabels: { font: { size: 11, family: "'Noto Sans JP', sans-serif" } }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 10 } },
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const item = tooltipItems[0];
+                                let label = item.chart.data.labels[item.dataIndex];
+                                if (Array.isArray(label)) return label.join(' ');
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- 2. Decision Matrix (Plotly ScatterGL) ---
+        const bubbleTrace = {
+            x: [9, 2, 5], // X: Release Frequency (High = GitHub Flow)
+            y: [2, 9, 6], // Y: Strictness (High = Git-flow)
+            mode: 'markers+text',
+            type: 'scattergl', // Use WebGL (NO SVG)
+            text: ['GitHub Flow', 'Git-flow', 'GitLab Flow'],
+            textposition: 'top center',
+            textfont: { family: "'Noto Sans JP', sans-serif", size: 14, color: '#334155' },
+            marker: {
+                size: [60, 50, 55],
+                color: ['#4f46e5', '#e11d48', '#0ea5e9'], // Indigo, Rose, Sky
+                opacity: 0.8,
+                line: { color: 'white', width: 2 }
+            },
+            hoverinfo: 'text'
+        };
+
+        const bubbleLayout = {
+            title: { text: 'リリース頻度 vs 厳格さ マトリクス', font: { size: 18 } },
+            xaxis: {
+                title: '← 低頻度　　リリース頻度　　高頻度 →',
+                range: [0, 11],
+                showgrid: true,
+                zeroline: false
+            },
+            yaxis: {
+                title: '← 柔軟　　　品質管理の厳格さ　　　厳格 →',
+                range: [0, 11],
+                showgrid: true,
+                zeroline: false
+            },
+            margin: { t: 50, b: 50, l: 60, r: 40 },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            showlegend: false
+        };
+
+        Plotly.newPlot('decisionMatrix', [bubbleTrace], bubbleLayout, {responsive: true, displayModeBar: false});
+    </script>
+</body>
+</html>
